@@ -4,7 +4,7 @@
       <div class="q-mb-xl">
         <q-input v-model="tempData.name" label="姓名" />
         <q-input v-model="tempData.age" label="年齡" />
-        <q-btn color="primary" class="q-mt-md">新增</q-btn>
+        <q-btn color="primary" class="q-mt-md" @click="handleAddData">新增</q-btn>
       </div>
 
       <q-table
@@ -29,13 +29,15 @@
 
         <template v-slot:body="props">
           <q-tr :props="props">
-            <q-td
-              v-for="col in props.cols"
-              :key="col.name"
-              :props="props"
-              style="min-width: 120px"
-            >
-              <div>{{ col.value }}</div>
+            <q-td v-for="col in props.cols" :key="col.name" :props="props" style="min-width: 120px">
+              <q-input
+                v-if="props.row.isEditing"
+                v-model="props.row[col.name]"
+                dense
+                borderless
+                @keyup.enter="handleUpdate(props.row)"
+              />
+              <div v-else>{{ col.value }}</div>
             </q-td>
             <q-td class="text-right" auto-width v-if="tableButtons.length > 0">
               <q-btn
@@ -80,12 +82,27 @@
 <script setup lang="ts">
 import axios from 'axios';
 import { QTableProps } from 'quasar';
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+
 interface btnType {
   label: string;
   icon: string;
   status: string;
 }
+
+interface RowData {
+  id: string;
+  name: string;
+  age: number;
+  isEditing: boolean;
+}
+
+interface ApiResponse {
+  id: string;
+  name: string;
+  age: number;
+}
+
 const blockData = ref([
   {
     name: 'test',
@@ -123,9 +140,80 @@ const tempData = ref({
   name: '',
   age: '',
 });
-function handleClickOption(btn, data) {
-  // ...
+
+async function fetchData(): Promise<void> {
+  try {
+    const response = await axios.get<ApiResponse[]>('https://dahua.metcfire.com.tw/api/CRUDTest/a');
+    blockData.value = response.data.map((item) => ({ ...item, isEditing: false } as RowData));
+    console.log(blockData.value);
+  } catch (error) {
+    console.error('Error fetching data:', error);
+  }
 }
+
+onMounted(async () => {
+  await fetchData();
+});
+
+async function handleClickOption(btn: btnType, data: RowData) {
+  if (btn.status === 'delete') {
+    try {
+      await axios.delete(`https://dahua.metcfire.com.tw/api/CRUDTest/${data.id}`);
+      console.log('Data deleted successfully');
+      await fetchData();
+    } catch (error) {
+      console.error('Error deleting data:', error);
+    }
+  } else if (btn.status === 'edit') {
+    if (data.isEditing) {
+      try {
+        const response = await axios.patch('https://dahua.metcfire.com.tw/api/CRUDTest', {
+          name: data.name,
+          age: parseInt(data.age.toString()),
+          id: data.id
+        });
+        console.log('Data updated successfully:', response.data);
+        data.isEditing = false;
+        await fetchData();
+      } catch (error) {
+        console.error('Error updating data:', error);
+      }
+    } else {
+      // Toggle editing mode
+      data.isEditing = true;
+    }
+  }
+}
+
+async function handleUpdate(row: RowData): Promise<void> {
+  try {
+    const response = await axios.patch('https://dahua.metcfire.com.tw/api/CRUDTest', {
+      name: row.name,
+      age: row.age, 
+      id: row.id
+    });
+    console.log('Data updated successfully:', response.data);
+    row.isEditing = false;
+    await fetchData();
+  } catch (error) {
+    console.error('Error updating data:', error);
+  }
+}
+
+async function handleAddData() {
+  try {
+    const response = await axios.post('https://dahua.metcfire.com.tw/api/CRUDTest', {
+      name: tempData.value.name,
+      age: parseInt(tempData.value.age)
+    });
+    console.log('Data added successfully:', response.data);
+    await fetchData();
+    tempData.value = { name: '', age: '' };
+  } catch (error) {
+    console.error('Error adding data:', error);
+  }
+}
+
 </script>
 
 <style lang="scss" scoped>
